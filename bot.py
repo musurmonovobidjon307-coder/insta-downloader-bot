@@ -4,14 +4,13 @@ import re
 import yt_dlp
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from shazamio import Shazam
 
-# Tokenni olish
+# Tokenni Railway Variables-dan olamiz
 TOKEN = os.getenv("BOT_TOKEN")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# YouTube va Instagram uchun barqaror sozlamalar
+# Barqarorlik uchun asosiy sozlamalar
 YDL_OPTS = {
     'quiet': True,
     'no_warnings': True,
@@ -21,7 +20,7 @@ YDL_OPTS = {
 
 @dp.message(Command("start"))
 async def start(message: types.Message):
-    await message.answer("✅ **Bot tayyor!**\nLink yuboring, men to'liq original musiqasini topib beraman.")
+    await message.answer("🤖 **Bot qayta tiklandi!**\nYouTube yoki Instagram linkini yuboring, men to'liq musiqasini topaman.")
 
 @dp.message()
 async def main_handler(message: types.Message):
@@ -32,69 +31,61 @@ async def main_handler(message: types.Message):
     v_name = f"v_{message.from_user.id}.mp4"
 
     try:
+        # Videoni yuklaymiz va uning nomini (title) olamiz
         with yt_dlp.YoutubeDL({**YDL_OPTS, 'format': 'best', 'outtmpl': v_name}) as ydl:
-            ydl.download([url])
-        
+            info = ydl.extract_info(url, download=True)
+            video_title = info.get('title', 'Musiqa') # Videoning nomi
+
         builder = types.InlineKeyboardMarkup(inline_keyboard=[
-            [types.InlineKeyboardButton(text="🔍 To'liq original musiqani topish", callback_data="find_shazam")]
+            [types.InlineKeyboardButton(text="🎵 To'liq original musiqani topish", callback_data="find_full")]
         ])
 
         if os.path.exists(v_name):
-            await message.answer_video(types.FSInputFile(v_name), caption=f"Tayyor! ✅\n🔗 Havola: {url}", reply_markup=builder)
+            # Videoning nomini caption-da yashirib ketamiz
+            await message.answer_video(
+                types.FSInputFile(v_name), 
+                caption=f"✅ {video_title}\n\n🔗 Havola: {url}", 
+                reply_markup=builder
+            )
             os.remove(v_name)
     except:
-        await message.answer("❌ Video yuklashda xatolik.")
+        await message.answer("❌ Yuklashda xatolik. Linkni tekshiring.")
     finally:
         if msg: await msg.delete()
 
 @dp.callback_query()
-async def shazam_handler(callback: types.CallbackQuery):
-    if callback.data == "find_shazam":
+async def audio_handler(callback: types.CallbackQuery):
+    if callback.data == "find_full":
+        # Caption-dan video nomini va linkni ajratamiz
         caption = callback.message.caption
+        video_title = caption.split('\n')[0].replace('✅ ', '')
         links = re.findall(r'(https?://[^\s]+)', caption)
-        if not links: return
-
-        url = links[0]
-        wait_msg = await callback.message.answer("Musiqa tahlil qilinmoqda... 🧠")
-        short_a = f"s_{callback.from_user.id}.mp3"
         
+        if not links: return
+        url = links[0]
+
+        await callback.answer("To'liq musiqa qidirilmoqda... 🎶")
+        full_a = f"full_{callback.from_user.id}.mp3"
+        
+        # Qidiruv mantiqi: avval videoni o'zini audiosini yuklaydi (eng aniq yo'l)
+        search_opts = {
+            **YDL_OPTS,
+            'format': 'bestaudio/best',
+            'outtmpl': full_a,
+        }
+
         try:
-            # 1. Videodan qisqa audio ajratamiz
-            with yt_dlp.YoutubeDL({**YDL_OPTS, 'format': 'bestaudio/best', 'outtmpl': short_a}) as ydl:
+            with yt_dlp.YoutubeDL(search_opts) as ydl:
                 ydl.download([url])
             
-            # 2. Shazam orqali tanib olamiz
-            shz = Shazam()
-            out = await shz.recognize_song(short_a)
-            
-            if out.get('track'):
-                track_name = f"{out['track']['subtitle']} - {out['track']['title']}"
-                await wait_msg.edit_text(f"🎵 Topildi: **{track_name}**\nTo'liq versiya qidirilmoqda... 🚀")
-                
-                # 3. YouTube'dan o'sha nom bilan qidirib, to'liq mp3 yuklaymiz
-                full_a = f"full_{callback.from_user.id}.mp3"
-                search_opts = {
-                    **YDL_OPTS, 
-                    'format': 'bestaudio/best', 
-                    'outtmpl': full_a,
-                    'default_search': 'ytsearch1',
-                }
-                with yt_dlp.YoutubeDL(search_opts) as ydl:
-                    ydl.download([f"ytsearch1:{track_name}"])
-                
-                if os.path.exists(full_a):
-                    await callback.message.answer_audio(types.FSInputFile(full_a), caption=f"✅ {track_name}\nTo'liq original versiya!")
-                    os.remove(full_a)
-                if os.path.exists(short_a): os.remove(short_a)
-                await wait_msg.delete()
-            else:
-                await wait_msg.edit_text("🔍 Shazam topolmadi. Videodagi audioni o'zi yuborilmoqda...")
-                await callback.message.answer_audio(types.FSInputFile(short_a), caption="Videodagi audio 🎵")
-                os.remove(short_a)
-                
-        except Exception:
-            await wait_msg.edit_text("❌ Musiqani topishda xatolik bo'ldi.")
-            if os.path.exists(short_a): os.remove(short_a)
+            if os.path.exists(full_a):
+                await callback.message.answer_audio(
+                    types.FSInputFile(full_a), 
+                    caption=f"🎵 {video_title}\nTo'liq versiya ✅"
+                )
+                os.remove(full_a)
+        except:
+            await callback.message.answer("❌ Musiqani topib bo'lmadi.")
 
 async def main():
     await dp.start_polling(bot)
