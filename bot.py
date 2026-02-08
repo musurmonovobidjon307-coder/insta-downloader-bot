@@ -6,6 +6,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from shazamio import Shazam
 
+# Railway Variables
 TOKEN = os.getenv("BOT_TOKEN")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -18,14 +19,14 @@ YDL_OPTS_BASE = {
 
 @dp.message(Command("start"))
 async def start(message: types.Message):
-    await message.answer("🤖 **Musiqa qidiruvchi bot!**\nLink yuboring, men to'liq qo'shiqni topib beraman.")
+    await message.answer("**Assalomu alaykum!**\nMen orqali YouTube yoki Instagram videolarini yuklashingiz va ulardagi musiqaning **to'liq versiyasini** topishingiz mumkin. 🎵")
 
 @dp.message()
 async def download_handler(message: types.Message):
     url = message.text
     if not url or not url.startswith("http"): return
 
-    msg = await message.answer("Video tahlil qilinmoqda... ⏳")
+    msg = await message.answer("Video yuklanmoqda... ⏳")
     v_path = f"v_{message.from_user.id}.mp4"
 
     try:
@@ -33,65 +34,64 @@ async def download_handler(message: types.Message):
             ydl.download([url])
         
         builder = types.InlineKeyboardMarkup(inline_keyboard=[
-            [types.InlineKeyboardButton(text="🎵 To'liq qo'shiqni topish", callback_data="find_full_audio")]
+            [types.InlineKeyboardButton(text="🎵 To'liq musiqasini topish", callback_data="full_music")]
         ])
 
         if os.path.exists(v_path):
             await message.answer_video(types.FSInputFile(v_path), caption=f"Tayyor! ✅\n🔗 Havola: {url}", reply_markup=builder)
             os.remove(v_path)
     except:
-        await message.answer("❌ Xatolik yuz berdi.")
+        await message.answer("❌ Videoni yuklab bo'lmadi.")
     finally:
         await msg.delete()
 
 @dp.callback_query()
 async def process_callback(callback: types.CallbackQuery):
-    if callback.data == "find_full_audio":
+    if callback.data == "full_music":
         caption = callback.message.caption
         links = re.findall(r'(https?://[^\s]+)', caption)
         if not links: return
 
         url = links[0]
-        await callback.answer("Qo'shiq qidirilmoqda... 🔍", show_alert=False)
+        wait_msg = await callback.message.answer("Qo'shiq tahlil qilinmoqda... 🔍")
         
-        # 1. Videodan qisqa audio ajratamiz (tanish uchun)
         temp_a = f"short_{callback.from_user.id}.mp3"
         try:
+            # 1. Videodan ovozni yuklab olamiz
             with yt_dlp.YoutubeDL({**YDL_OPTS_BASE, 'format': 'bestaudio/best', 'outtmpl': temp_a}) as ydl:
                 ydl.download([url])
             
-            # 2. Shazam orqali tanib olamiz
+            # 2. Shazam orqali qo'shiqni taniymiz
             out = await shazam.recognize_song(temp_a)
-            os.remove(temp_a)
+            if os.path.exists(temp_a): os.remove(temp_a)
 
             if not out.get('track'):
-                await callback.message.answer("❌ Kechirasiz, qo'shiqni aniqlab bo'lmadi.")
+                await wait_msg.edit_text("❌ Kechirasiz, qo'shiqni aniqlab bo'lmadi.")
                 return
 
-            title = out['track']['title']
-            author = out['track']['subtitle']
-            full_name = f"{author} - {title}"
-            
-            await callback.message.answer(f"🔍 Topildi: **{full_name}**\nTo'liq versiyasi yuklanmoqda... ⏳")
+            track_info = out['track']
+            full_name = f"{track_info['subtitle']} - {track_info['title']}"
+            await wait_msg.edit_text(f"🎵 Topildi: **{full_name}**\nTo'liq versiya yuklanmoqda... ⏳")
 
-            # 3. YouTube'dan to'liq variantini qidirib yuklaymiz
-            full_audio_path = f"full_{callback.from_user.id}.mp3"
+            # 3. YouTube'dan to'liq versiyasini qidiramiz
+            full_a_path = f"full_{callback.from_user.id}.mp3"
             search_opts = {
                 **YDL_OPTS_BASE,
                 'format': 'bestaudio/best',
-                'outtmpl': full_audio_path,
-                'default_search': 'ytsearch1', # Birinchi chiqqan natija
+                'outtmpl': full_a_path,
+                'default_search': 'ytsearch1',
             }
             
             with yt_dlp.YoutubeDL(search_opts) as ydl:
                 ydl.download([f"ytsearch1:{full_name}"])
             
-            if os.path.exists(full_audio_path):
-                await callback.message.answer_audio(types.FSInputFile(full_audio_path), caption=f"🎵 {full_name}\nTo'liq versiya ✅")
-                os.remove(full_audio_path)
+            if os.path.exists(full_a_path):
+                await callback.message.answer_audio(types.FSInputFile(full_a_path), caption=f"🎵 {full_name}\nOriginal to'liq versiya ✅")
+                os.remove(full_a_path)
+                await wait_msg.delete()
                 
-        except Exception as e:
-            await callback.message.answer("❌ Qo'shiqni topishda xatolik yuz berdi.")
+        except Exception:
+            await wait_msg.edit_text("❌ Musiqani topishda xatolik yuz berdi.")
 
 async def main():
     await dp.start_polling(bot)
