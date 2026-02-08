@@ -19,7 +19,7 @@ YDL_OPTS = {
 
 @dp.message(Command("start"))
 async def start(message: types.Message):
-    await message.answer("✅ **Bot qayta ishga tushdi!**\nYouTube yoki Instagram linkini yuboring.")
+    await message.answer("✅ **Assalomu alaykum!**\nBu bot @Obidjon_Musurmonov tomonidan yaratildi!\nYouTube yoki Instagram linkini yuboring.\nMen sizga video topib beraman")
 
 @dp.message()
 async def main_handler(message: types.Message):
@@ -34,7 +34,7 @@ async def main_handler(message: types.Message):
             ydl.download([url])
         
         builder = types.InlineKeyboardMarkup(inline_keyboard=[
-            [types.InlineKeyboardButton(text="🎵 To'liq musiqasini topish", callback_data="find_full")]
+            [types.InlineKeyboardButton(text="🎵 Musiqasini topish", callback_data="find_full")]
         ])
 
         if os.path.exists(file_name):
