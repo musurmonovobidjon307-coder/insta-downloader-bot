@@ -4,7 +4,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 import yt_dlp
 
-# Railway Variables bo'limidan tokenni oladi
+# Railway'dagi 'Variables' bo'limidan tokenni oladi
 TOKEN = os.getenv("BOT_TOKEN")
 
 bot = Bot(token=TOKEN)
@@ -47,7 +47,7 @@ async def universal_download(message: types.Message):
             caption="Tayyor! ✅\n@Vedio_yukla1bot orqali yuklandi."
         )
 
-        # 2. Audio ajratish sozlamalari (FFmpeg kerak)
+        # 2. Audio ajratish (FFmpeg kerak)
         ydl_a_opts = {
             'format': 'bestaudio/best',
             'outtmpl': a_path.replace(".mp3", ""),
@@ -73,7 +73,6 @@ async def universal_download(message: types.Message):
         await message.answer(f"❌ Xatolik: Yuklab bo'lmadi. Havola noto'g'ri yoki video yopiq profilda.")
     
     finally:
-        # Fayllarni o'chirish
         for p in [v_path, a_path]:
             if os.path.exists(p): os.remove(p)
         await msg.delete()
