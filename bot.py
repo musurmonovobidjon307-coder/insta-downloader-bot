@@ -6,10 +6,12 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from shazamio import Shazam
 
+# Tokenni olish
 TOKEN = os.getenv("BOT_TOKEN")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
+# YouTube va Instagram uchun barqaror sozlamalar
 YDL_OPTS = {
     'quiet': True,
     'no_warnings': True,
