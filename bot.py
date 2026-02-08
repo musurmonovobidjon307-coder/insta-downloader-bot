@@ -3,16 +3,13 @@ import os
 import yt_dlp
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
 
 TOKEN = os.getenv("BOT_TOKEN")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# Qidiruv holati uchun
-class SearchState(StatesGroup):
-    waiting_for_name = State()
+# Qidiruv natijalari uchun vaqtinchalik xotira
+search_results = {}
 
 YDL_OPTS = {
     'quiet': True, 'no_warnings': True, 'nocheckcertificate': True,
@@ -21,7 +18,7 @@ YDL_OPTS = {
 
 @dp.message(Command("start"))
 async def start(message: types.Message):
-    await message.answer("🤖 **Assalomu alaykum!**\nYouTube yoki Instagram linkini yuboring. To'liq qo'shiqni topish uchun esa qo'shiq nomini yozib yuboring!")
+    await message.answer("🤖 **Assalomu alaykum!**\nYouTube yoki Instagram linkini yuboring. To'liq qo'shiqni topish uchun esa **qo'shiq nomini** yozib yuboring!")
 
 # 1. Video linki kelganda uni yuklab berish
 @dp.message(F.text.startswith("http"))
@@ -32,14 +29,14 @@ async def handle_link(message: types.Message):
         with yt_dlp.YoutubeDL({**YDL_OPTS, 'format': 'best', 'outtmpl': path}) as ydl:
             ydl.download([message.text])
         if os.path.exists(path):
-            await message.answer_video(types.FSInputFile(path), caption="Tayyor! ✅")
+            await message.answer_video(types.FSInputFile(path), caption="Tayyor! ✅\n\n💡 _Qo'shiqni topish uchun uning nomini yozib yuboring._")
             os.remove(path)
     except:
-        await message.answer("❌ Yuklashda xatolik yuz berdi.")
+        await message.answer("❌ Yuklashda xatolik yuz berdi. Linkni tekshiring.")
     finally:
         await msg.delete()
 
-# 2. Qo'shiq nomi yozilganda YouTube'dan qidirish
+# 2. Qo'shiq nomi yozilganda YouTube'dan qidirish (Sozandabot uslubida)
 @dp.message(F.text)
 async def handle_search(message: types.Message):
     q = message.text
@@ -55,15 +52,18 @@ async def handle_search(message: types.Message):
                 await wait_msg.edit_text("❌ Hech narsa topilmadi.")
                 return
 
-            results_text = f"🎶 **{q}** bo'yicha topildi:\n\n"
+            results_text = f"🎶 **{q}** bo'yicha topilgan natijalar:\n\n"
             buttons = []
+            temp_list = []
             for i, entry in enumerate(search_data, 1):
                 t = entry.get('title')[:35]
                 d = entry.get('duration_string', '0:00')
                 results_text += f"{i}. {t} [**{d}**]\n"
-                buttons.append([types.InlineKeyboardButton(text=f"{i}-qo'shiqni yuklash", callback_data=f"dl:{entry['webpage_url']}")] )
+                temp_list.append({'url': entry.get('webpage_url'), 'title': t})
+                buttons.append(types.InlineKeyboardButton(text=str(i), callback_data=f"dl:{i}"))
 
-            keyboard = types.InlineKeyboardMarkup(inline_keyboard=buttons)
+            search_results[message.from_user.id] = temp_list
+            keyboard = types.InlineKeyboardMarkup(inline_keyboard=[buttons])
             await message.answer(results_text, reply_markup=keyboard)
             await wait_msg.delete()
     except:
@@ -71,15 +71,19 @@ async def handle_search(message: types.Message):
 
 @dp.callback_query(F.data.startswith("dl:"))
 async def download_audio(callback: types.CallbackQuery):
-    url = callback.data.replace("dl:", "")
-    await callback.answer("Yuklash boshlandi...")
+    idx = int(callback.data.split(":")[1]) - 1
+    user_id = callback.from_user.id
+    if user_id not in search_results: return
+
+    chosen = search_results[user_id][idx]
+    await callback.answer(f"📥 {chosen['title']} yuklanmoqda...")
     status = await callback.message.answer("📥 Qo'shiq yuklanmoqda...")
     
-    path = f"a_{callback.from_user.id}.mp3"
+    path = f"a_{user_id}.mp3"
     try:
         with yt_dlp.YoutubeDL({**YDL_OPTS, 'format': 'bestaudio/best', 'outtmpl': path}) as ydl:
-            ydl.download([url])
-        await callback.message.answer_audio(types.FSInputFile(path), caption="Marhamat! ✅")
+            ydl.download([chosen['url']])
+        await callback.message.answer_audio(types.FSInputFile(path), caption=f"🎵 {chosen['title']}\nTayyor! ✅")
         os.remove(path)
         await status.delete()
     except:
