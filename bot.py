@@ -9,80 +9,111 @@ TOKEN = os.getenv("BOT_TOKEN")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# Qidiruv uchun xotira (vaqtinchalik natijalarni saqlash)
+# Qidiruv natijalari uchun vaqtinchalik xotira
 search_results = {}
 
-YDL_OPTS = {
-    'quiet': True, 'no_warnings': True, 'nocheckcertificate': True,
+YDL_OPTS_BASE = {
+    'quiet': True,
+    'no_warnings': True,
+    'nocheckcertificate': True,
     'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+    'referer': 'https://www.google.com/',
 }
 
 @dp.message(Command("start"))
 async def start(message: types.Message):
-    await message.answer("🤖 **Musiqa qidiruvchi bot tayyor!**\nLink yuboring, men sizga ro'yxat ko'rsataman.")
+    await message.answer("🤖 **Assalomu alaykum!**\nYouTube yoki Instagram linkini yuboring. Men videoni yuklayman va undagi musiqani qidirib beraman!")
 
 @dp.message(F.text.startswith("http"))
 async def handle_link(message: types.Message):
-    msg = await message.answer("Tahlil qilinmoqda... ⏳")
     url = message.text
+    msg = await message.answer("Video yuklanmoqda... ⏳")
+    v_path = f"v_{message.from_user.id}.mp4"
 
     try:
-        with yt_dlp.YoutubeDL(YDL_OPTS) as ydl:
-            info = ydl.extract_info(url, download=False)
-            # Metadata yoki video nomidan qidiruv so'zi yasaymiz
-            q = f"{info.get('artist', '')} {info.get('track', '')}" or info.get('title')
-            q = re.sub(r'[^\w\s]', '', q).strip()
-
-            # YouTube'dan 5 ta natija qidiramiz
-            search_data = ydl.extract_info(f"ytsearch5:{q} official audio", download=False)['entries']
+        # 1. Videoni yuklash va ma'lumotlarni olish
+        with yt_dlp.YoutubeDL({**YDL_OPTS_BASE, 'format': 'best', 'outtmpl': v_path}) as ydl:
+            info = ydl.extract_info(url, download=True)
             
-            results_text = f"🔍 **{q}** bo'yicha natijalar:\n\n"
+            # Aqlli qidiruv so'zini yasaymiz
+            track = info.get('track')
+            artist = info.get('artist')
+            title = info.get('title', 'Musiqa')
+            
+            if track and artist:
+                q = f"{artist} {track}"
+            else:
+                # Keraksiz so'zlarni tozalaymiz
+                q = re.sub(r'(?i)shorts|reels|instagram|video|#\w+|@\w+', '', title)
+            
+            q = q.strip()
+
+        # 2. Videoni yuboramiz
+        builder = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="🎵 To'liq variantlarni ko'rish", callback_data=f"list:{q[:40]}")]
+        ])
+
+        if os.path.exists(v_path):
+            await message.answer_video(types.FSInputFile(v_path), caption=f"✅ Tayyor!\n🔍 Qidiruv: **{q}**", reply_markup=builder)
+            os.remove(v_path)
+    except:
+        await message.answer("❌ Yuklashda xatolik yuz berdi.")
+    finally:
+        await msg.delete()
+
+@dp.callback_query(F.data.startswith("list:"))
+async def show_list(callback: types.CallbackQuery):
+    query = callback.data.replace("list:", "")
+    await callback.answer("Qidirilmoqda...")
+    
+    wait_msg = await callback.message.answer(f"🔍 **{query}** bo'yicha eng yaxshi variantlar...")
+
+    try:
+        with yt_dlp.YoutubeDL(YDL_OPTS_BASE) as ydl:
+            # YouTube'dan 5 ta natija
+            search_data = ydl.extract_info(f"ytsearch5:{query} official audio", download=False)['entries']
+            
+            results_text = f"🎶 **{query}** uchun natijalar:\n\n"
             buttons = []
             temp_list = []
 
             for i, entry in enumerate(search_data, 1):
-                title = entry.get('title')[:40]
-                duration = entry.get('duration_string', '0:00')
-                results_text += f"{i}. {title} **{duration}**\n"
-                
-                # Natijani saqlab qo'yamiz
-                temp_list.append({'url': entry.get('webpage_url'), 'title': title})
-                buttons.append(types.InlineKeyboardButton(text=str(i), callback_data=f"down:{i}"))
+                t = entry.get('title')[:35]
+                d = entry.get('duration_string', '0:00')
+                results_text += f"{i}. {t} — **{d}**\n"
+                temp_list.append({'url': entry.get('webpage_url'), 'title': t})
+                buttons.append(types.InlineKeyboardButton(text=str(i), callback_data=f"dl:{i}"))
 
-            # Foydalanuvchi IDsi bilan natijalarni saqlaymiz
-            search_results[message.from_user.id] = temp_list
-
+            search_results[callback.from_user.id] = temp_list
             keyboard = types.InlineKeyboardMarkup(inline_keyboard=[buttons])
-            await message.answer(results_text, reply_markup=keyboard)
-            
-    except Exception:
-        await message.answer("❌ Ma'lumot topilmadi.")
-    finally:
-        await msg.delete()
+            await callback.message.answer(results_text, reply_markup=keyboard)
+            await wait_msg.delete()
+    except:
+        await wait_msg.edit_text("❌ Qidiruvda xatolik bo'ldi.")
 
-@dp.callback_query(F.data.startswith("down:"))
-async def download_chosen(callback: types.CallbackQuery):
+@dp.callback_query(F.data.startswith("dl:"))
+async def download_audio(callback: types.CallbackQuery):
     idx = int(callback.data.split(":")[1]) - 1
     user_id = callback.from_user.id
 
     if user_id not in search_results:
-        await callback.answer("Eski natija. Linkni qayta yuboring.", show_alert=True)
+        await callback.answer("Ma'lumot topilmadi, linkni qayta yuboring.", show_alert=True)
         return
 
     chosen = search_results[user_id][idx]
-    await callback.message.edit_text(f"📥 **{chosen['title']}** yuklanmoqda...")
-
-    path = f"music_{user_id}.mp3"
+    status = await callback.message.answer(f"📥 **{chosen['title']}** yuklanmoqda...")
+    
+    path = f"a_{user_id}.mp3"
     try:
-        with yt_dlp.YoutubeDL({**YDL_OPTS, 'format': 'bestaudio/best', 'outtmpl': path}) as ydl:
+        with yt_dlp.YoutubeDL({**YDL_OPTS_BASE, 'format': 'bestaudio/best', 'outtmpl': path}) as ydl:
             ydl.download([chosen['url']])
         
         if os.path.exists(path):
-            await callback.message.answer_audio(types.FSInputFile(path), caption="Marhamat! ✅")
+            await callback.message.answer_audio(types.FSInputFile(path), caption=f"🎵 {chosen['title']}\nMarhamat! ✅")
             os.remove(path)
-            await callback.message.delete()
+            await status.delete()
     except:
-        await callback.message.answer("❌ Yuklashda xatolik bo'ldi.")
+        await callback.message.answer("❌ Yuklab bo'lmadi.")
 
 async def main():
     await dp.start_polling(bot)
