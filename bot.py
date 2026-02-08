@@ -13,7 +13,7 @@ async def start(message: types.Message):
     await message.answer(
         "👋 **Assalomu alaykum!**\n\n"
         "Ushbu bot **Obidjon Musurmonov** tomonidan yaratildi.\n"
-        "Menga Instagram link yuboring, men uni yuklab beraman! 📥"
+        "Menga Instagram link yuboring, men sizga video va qo'shig'ini yuboraman! 📥"
     )
 
 @dp.message()
@@ -22,38 +22,44 @@ async def download_video(message: types.Message):
     if "instagram.com" not in url:
         return
 
-    msg = await message.answer("Yuklanmoqda... ⏳")
-    file_path = f"{message.from_user.id}.mp4"
+    msg = await message.answer("Xo'sh, jarayon boshlandi... ⏳")
+    v_path = f"{message.from_user.id}.mp4"
+    a_path = f"{message.from_user.id}.mp3"
 
     try:
-        # Instagram blokini aylanib o'tish uchun maxsus sozlamalar
-        ydl_opts = {
-            'format': 'best',
-            'outtmpl': file_path,
-            'quiet': True,
-            'no_warnings': True,
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'add_header': [
-                'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                'Accept-Language: en-US,en;q=0.5',
-            ],
-            'referer': 'https://www.google.com/',
+        # 1. Video yuklash sozlamasi
+        ydl_v = {
+            'format': 'best', 'outtmpl': v_path, 'quiet': True,
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'
         }
-
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        with yt_dlp.YoutubeDL(ydl_v) as ydl:
             ydl.download([url])
 
-        if os.path.exists(file_path):
-            await message.answer_video(types.FSInputFile(file_path), caption="Tayyor! ✅\nMuallif: Obidjon")
-            os.remove(file_path)
-            await msg.delete()
-        else:
-            raise Exception("Fayl yuklanmadi")
+        # Videoni yuborish
+        await message.answer_video(types.FSInputFile(v_path), caption="Tayyor! ✅\nMuallif: Obidjon")
 
-    except Exception as e:
-        print(f"Xato: {e}")
-        await msg.edit_text("❌ Instagram hozircha blokladi. 5-10 daqiqadan so'ng boshqa link bilan urinib ko'ring yoki kutubxonani yangilang📥.")
-        if os.path.exists(file_path): os.remove(file_path)
+        # 2. Audio (musiqa) ajratish sozlamasi
+        ydl_a = {
+            'format': 'bestaudio/best', 'outtmpl': a_path.replace(".mp3", ""),
+            'quiet': True,
+            'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}],
+        }
+        with yt_dlp.YoutubeDL(ydl_a) as ydl:
+            ydl.download([url])
+
+        # Musiqani yuborish
+        if os.path.exists(a_path):
+            await message.answer_audio(types.FSInputFile(a_path), caption="Videodagi qo'shiq! 🎶")
+
+        # Tozalash
+        for p in [v_path, a_path]:
+            if os.path.exists(p): os.remove(p)
+        await msg.delete()
+
+    except Exception:
+        await msg.edit_text("❌ Xatolik! Link noto'g'ri yoki Instagram yuklashga ruxsat bermadi.")
+        for p in [v_path, a_path]:
+            if os.path.exists(p): os.remove(p)
 
 async def main():
     await dp.start_polling(bot)
