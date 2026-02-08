@@ -5,45 +5,41 @@ import yt_dlp
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 
-# Railway Variables-dan tokenni olamiz
 TOKEN = os.getenv("BOT_TOKEN")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# Blokdan qochish uchun eng kuchli sozlamalar
-YDL_COMMON_OPTIONS = {
+# Eng yangi va barqaror sozlamalar
+YDL_OPTS_BASE = {
     'quiet': True,
     'no_warnings': True,
-    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
     'nocheckcertificate': True,
-    'ignoreerrors': True,
-    'geo_bypass': True,
+    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+    'referer': 'https://www.google.com/',
 }
 
 @dp.message(Command("start"))
 async def start(message: types.Message):
-    await message.answer("🤖 **Universal Downloader!**\n\nYouTube yoki Instagram linkini yuboring.")
+    await message.answer("🤖 **Assalomu alaykum!**\nBu bot @Obidjon_Musurmonov tomonidan yaratildi\nYouTube yoki Instagram linkini yuboring.")
 
 @dp.message()
 async def download_handler(message: types.Message):
     url = message.text
     if not url or not url.startswith("http"): return
 
-    msg = await message.answer("Video yuklanmoqda... ⏳")
+    msg = await message.answer("Jarayon boshlandi... ⏳")
     v_path = f"v_{message.from_user.id}.mp4"
 
     try:
-        # Videoni eng yaxshi sifatda yuklash
-        with yt_dlp.YoutubeDL({**YDL_COMMON_OPTIONS, 'format': 'best', 'outtmpl': v_path}) as ydl:
+        # Videoni yuklash
+        with yt_dlp.YoutubeDL({**YDL_OPTS_BASE, 'format': 'best', 'outtmpl': v_path}) as ydl:
             ydl.download([url])
         
-        # Audio tugmasini yaratish
         builder = types.InlineKeyboardMarkup(inline_keyboard=[
             [types.InlineKeyboardButton(text="🎵 Qo'shig'ini topish", callback_data="get_audio")]
         ])
 
         if os.path.exists(v_path):
-            # Caption ichiga linkni aniq joylaymiz
             await message.answer_video(
                 types.FSInputFile(v_path), 
                 caption=f"Tayyor! ✅\n\n🔗 Havola: {url}", 
@@ -51,9 +47,9 @@ async def download_handler(message: types.Message):
             )
             os.remove(v_path)
         else:
-            await message.answer("❌ Videoni yuklab bo'lmadi.")
-    except Exception:
-        await message.answer("❌ Xatolik yuz berdi.")
+            await message.answer("❌ Video yuklanmadi. Boshqa link sinab ko'ring.")
+    except:
+        await message.answer("❌ Xatolik: Bu videoni yuklab bo'lmadi.")
     finally:
         await msg.delete()
 
@@ -62,45 +58,38 @@ async def process_callback(callback: types.CallbackQuery):
     if callback.data == "get_audio":
         caption = callback.message.caption
         links = re.findall(r'(https?://[^\s]+)', caption)
-        
-        if not links:
-            await callback.answer("❌ Havola topilmadi.", show_alert=True)
-            return
+        if not links: return
 
         url = links[0]
         await callback.answer("Musiqa tayyorlanmoqda... 🎶")
         
-        # Audio yuklash uchun sodda va xatosiz sozlama
         a_path = f"audio_{callback.from_user.id}.mp3"
+        # Audio yuklashda eng sodda formatdan foydalanamiz
         audio_opts = {
-            **YDL_COMMON_OPTIONS,
+            **YDL_OPTS_BASE,
             'format': 'bestaudio/best',
-            'outtmpl': a_path, # To'g'ridan-to'g'ri MP3 qilib yuklaymiz
+            'outtmpl': a_path,
         }
         
         try:
             with yt_dlp.YoutubeDL(audio_opts) as ydl:
                 ydl.download([url])
             
-            # Agar fayl nomi .mp3 bilan tugamasa, uni to'g'irlaymiz
-            # Ba'zan yt-dlp o'ziga xos formatda yuklashi mumkin
-            files = os.listdir('.')
-            downloaded_file = ""
-            for f in files:
+            # Faylni aniq topish uchun
+            downloaded = ""
+            for f in os.listdir('.'):
                 if f.startswith(f"audio_{callback.from_user.id}"):
-                    downloaded_file = f
+                    downloaded = f
                     break
 
-            if downloaded_file:
+            if downloaded:
                 await callback.message.answer_audio(
-                    types.FSInputFile(downloaded_file), 
+                    types.FSInputFile(downloaded), 
                     caption="Marhamat, videodagi qo'shiq! 🎵"
                 )
-                os.remove(downloaded_file)
-            else:
-                await callback.message.answer("❌ Musiqani topib bo'lmadi.")
-        except Exception:
-            await callback.message.answer("❌ Musiqa yuklashda xatolik yuz berdi.")
+                os.remove(downloaded)
+        except:
+            await callback.message.answer("❌ Musiqani yuklashda xatolik bo'ldi.")
 
 async def main():
     await dp.start_polling(bot)
