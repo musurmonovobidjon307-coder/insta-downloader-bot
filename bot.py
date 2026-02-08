@@ -19,7 +19,7 @@ YDL_OPTS = {
 
 @dp.message(Command("start"))
 async def start(message: types.Message):
-    await message.answer("✅ **Assalomu alaykum!**\nBu bot @abdulhamidovichch Tomonidan yaratildi\nYouTube yoki Instagram linkini yuboring.")
+    await message.answer("✅ **Assalomu alaykum!**\nBu bot @Obidjon_Musurmonov Tomonidan yaratildi\nYouTube yoki Instagram linkini yuboring!\nMen sizga Vedio va Qo'shiq topib beraman")
 
 @dp.message()
 async def main_handler(message: types.Message):
