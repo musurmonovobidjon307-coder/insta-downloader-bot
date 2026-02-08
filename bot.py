@@ -12,7 +12,7 @@ dp = Dispatcher()
 async def start(message: types.Message):
     await message.answer(
         "👋 **Assalomu alaykum!**\n\n"
-        "Ushbu bot **Obidjon Musurmonov** tomonidan yaratildi.\n"
+        "Ushbu bot **@Obidjon_Musurmonov** tomonidan yaratildi.\n"
         "Menga Instagram link yuboring, men sizga video va qo'shig'ini yuboraman! 📥"
     )
 
@@ -27,7 +27,7 @@ async def download_video(message: types.Message):
     a_path = f"{message.from_user.id}.mp3"
 
     try:
-        # 1. Video yuklash sozlamasi
+        # 1. Video yuklash
         ydl_v = {
             'format': 'best', 'outtmpl': v_path, 'quiet': True,
             'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'
@@ -35,10 +35,9 @@ async def download_video(message: types.Message):
         with yt_dlp.YoutubeDL(ydl_v) as ydl:
             ydl.download([url])
 
-        # Videoni yuborish
         await message.answer_video(types.FSInputFile(v_path), caption="Tayyor! ✅\nMuallif: Obidjon")
 
-        # 2. Audio (musiqa) ajratish sozlamasi
+        # 2. Audio (musiqa) ajratish
         ydl_a = {
             'format': 'bestaudio/best', 'outtmpl': a_path.replace(".mp3", ""),
             'quiet': True,
@@ -47,7 +46,6 @@ async def download_video(message: types.Message):
         with yt_dlp.YoutubeDL(ydl_a) as ydl:
             ydl.download([url])
 
-        # Musiqani yuborish
         if os.path.exists(a_path):
             await message.answer_audio(types.FSInputFile(a_path), caption="Videodagi qo'shiq! 🎶")
 
@@ -57,7 +55,7 @@ async def download_video(message: types.Message):
         await msg.delete()
 
     except Exception:
-        await msg.edit_text("❌ Xatolik! Link noto'g'ri yoki Instagram yuklashga ruxsat bermadi.")
+        await msg.edit_text("❌ Xatolik! Instagram yuklashga ruxsat bermadi.")
         for p in [v_path, a_path]:
             if os.path.exists(p): os.remove(p)
 
